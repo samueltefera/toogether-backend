@@ -131,6 +131,8 @@ urlpatterns = [
     ),
     path("users/recovery-code/", profile_views.recovery_code, name="recovery_code"),
     path("users/validate-code/", profile_views.validate_code, name="validate_code"),
+    path('phone/verify/send/', profile_views.send_phone_verification, name='send-phone-verification'),
+    path('phone/verify/confirm/', profile_views.verify_phone_code, name='verify-phone-code'),
     # !!Public endpoints -  ModelViewSets
     path("", include(router.urls)),
 ]

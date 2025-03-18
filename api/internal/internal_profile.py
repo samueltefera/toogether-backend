@@ -85,7 +85,11 @@ def generated_profiles(request):
 
         # generate age between 5 years less and more than the age of the current user
         current_age = current_user.age
-        age = fake.random_int(current_age - 5, current_age + 5)
+        if current_age is None:
+            # If the current user doesn't have an age set, use a default range
+            age = fake.random_int(18, 35)
+        else:
+            age = fake.random_int(max(18, current_age - 5), current_age + 5)
 
         # generate a random birthdate (yyyy-mm-dd) using the age
         birthdate = date.today() - timedelta(days=age * 365)

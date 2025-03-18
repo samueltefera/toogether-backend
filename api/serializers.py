@@ -35,9 +35,6 @@ class PhotoSerializer(serializers.ModelSerializer):
 
 
 class ProfileSerializer(serializers.ModelSerializer):
-    token = serializers.SerializerMethodField(read_only=True)
-    refresh_token = serializers.SerializerMethodField(read_only=True)
-
     # transform the gender and show me into text "Male"
     gender = serializers.CharField(
         source="get_gender_display", required=True, allow_null=False
@@ -47,32 +44,13 @@ class ProfileSerializer(serializers.ModelSerializer):
     )
 
     photos = PhotoSerializer(source="photo_set", many=True, read_only=True)
-
     is_in_group = serializers.SerializerMethodField()
     total_likes = serializers.SerializerMethodField()
     total_matches = serializers.SerializerMethodField()
 
     class Meta:
         model = models.Profile
-        exclude = [
-            "user_permissions",
-            "groups",
-            "password",
-            "last_login",
-            "is_staff",
-            "is_active",
-            "likes",
-            "blocked_profiles",
-        ]
-
-    # refresh the token everytime the user is called
-    def get_token(self, profile):
-        token = RefreshToken.for_user(profile)
-        return str(token.access_token)
-
-    def get_refresh_token(self, profile):
-        token = RefreshToken.for_user(profile)
-        return str(token)
+        exclude = ["password", "user_permissions", "groups"]
 
     def get_is_in_group(self, profile):
         return profile.member_group.all().exists()
@@ -382,3 +360,17 @@ class UpdateLocation(serializers.Serializer):
 
 class GroupSerializerWithMember(serializers.Serializer):
     member_id = serializers.CharField(required=True, allow_null=False)
+
+
+class PhoneVerificationSerializer(serializers.Serializer):
+    phone = serializers.CharField(required=True)
+    code = serializers.CharField(required=True)
+
+
+class PhoneVerificationResponseSerializer(serializers.Serializer):
+    acknowledge = serializers.CharField()
+    response = serializers.DictField()
+
+
+class PhoneVerificationRequestSerializer(serializers.Serializer):
+    phone = serializers.CharField(required=True)

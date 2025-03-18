@@ -6,21 +6,27 @@ from rest_framework.viewsets import ModelViewSet
 from django.core.exceptions import ObjectDoesNotExist
 from api import models, serializers
 from django.contrib.auth.hashers import make_password
-from datetime import date
+from datetime import date, timedelta
 from django.utils import timezone
 from django.contrib.gis.geos import GEOSGeometry
 from decimal import *
 from django.core.mail import send_mail
+import uuid
 
 from api.utils.emails import send_report_email
 
 import random
 import json
+import requests
+from django.conf import settings
 
+# Documentation imports
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample, OpenApiResponse
 
 # simple json token
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.tokens import RefreshToken
 
 # ----------------------- LOGIN --------------------------------
 
@@ -43,6 +49,37 @@ class MyTokenObtainPairView(TokenObtainPairView):
 # ----------------------- PROFILES VIEWS --------------------------------
 
 
+@extend_schema(
+    request=OpenApiExample(
+        name="Recovery Code Request",
+        value={"email": "user@example.com"},
+        request_only=True
+    ),
+    responses={
+        200: OpenApiResponse(
+            description="Code sent successfully",
+            examples=[
+                OpenApiExample(
+                    "Success Response",
+                    value={"detail": "We sent you an email with you recovery password code"},
+                    status_codes=["200"],
+                )
+            ]
+        ),
+        400: OpenApiResponse(
+            description="Email not found",
+            examples=[
+                OpenApiExample(
+                    "Error Response",
+                    value={"detail": "There is no account associated with the email entered"},
+                    status_codes=["400"],
+                )
+            ]
+        )
+    },
+    description="Send a recovery code to the user's email for password reset",
+    summary="Send recovery code"
+)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def recovery_code(request):
@@ -86,6 +123,43 @@ def recovery_code(request):
     )
 
 
+@extend_schema(
+    request=OpenApiExample(
+        name="Validate Code Request",
+        value={
+            "email": "user@example.com",
+            "code": "123456"
+        },
+        request_only=True
+    ),
+    responses={
+        200: OpenApiResponse(
+            description="Code validation successful",
+            examples=[
+                OpenApiExample(
+                    "Success Response",
+                    value={
+                        "detail": "Recovery code success",
+                        "AccessToken": "token_value"
+                    },
+                    status_codes=["200"],
+                )
+            ]
+        ),
+        400: OpenApiResponse(
+            description="Invalid or expired code",
+            examples=[
+                OpenApiExample(
+                    "Error Response",
+                    value={"detail": "Code does not exists"},
+                    status_codes=["400"],
+                )
+            ]
+        )
+    },
+    description="Validate recovery code to reset password",
+    summary="Validate recovery code"
+)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def validate_code(request):
@@ -144,6 +218,14 @@ class ProfileViewSet(ModelViewSet):
     # * Register
     def create(self, request):
         data = request.data
+        
+        # Check if required fields are present
+        if 'password' not in data or 'repeated_password' not in data or 'email' not in data:
+            return Response(
+                {"detail": "Email, password and repeated_password are required"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
         password = data["password"]
         repeated_password = data["repeated_password"]
 
@@ -242,6 +324,24 @@ class ProfileViewSet(ModelViewSet):
             {"detail": "User deleted successfully"}, status=status.HTTP_200_OK
         )
 
+    @extend_schema(
+        request=serializers.CreateProfileSerializer,
+        responses={
+            200: serializers.ProfileSerializer,
+            400: OpenApiResponse(
+                description="Invalid profile data or age under 18",
+                examples=[
+                    OpenApiExample(
+                        "Age Error Response",
+                        value={"detail": "You must be over 18 years old to use this app"},
+                        status_codes=["400"],
+                    )
+                ]
+            )
+        },
+        description="Create or update user profile with name, birthdate, university, description, gender, and show_me preferences",
+        summary="Create user profile"
+    )
     @action(detail=False, methods=["post"], url_path=r"actions/create-profile")
     def create_profile(self, request):
         profile = request.user
@@ -278,6 +378,24 @@ class ProfileViewSet(ModelViewSet):
         profile_serializer = serializers.ProfileSerializer(profile)
         return Response(profile_serializer.data)
 
+    @extend_schema(
+        request=serializers.UpdateLocation,
+        responses={
+            200: serializers.ProfileSerializer,
+            400: OpenApiResponse(
+                description="Invalid location data",
+                examples=[
+                    OpenApiExample(
+                        "Error Response",
+                        value={"detail": "Invalid location data"},
+                        status_codes=["400"],
+                    )
+                ]
+            )
+        },
+        description="Update the user's location with latitude and longitude coordinates",
+        summary="Update user location"
+    )
     @action(detail=False, methods=["post"], url_path=r"actions/location")
     def update_location(self, request):
         profile = request.user
@@ -297,6 +415,23 @@ class ProfileViewSet(ModelViewSet):
         serializer = serializers.ProfileSerializer(profile, many=False)
         return Response(serializer.data)
 
+    @extend_schema(
+        responses={
+            200: serializers.SwipeProfileSerializer,
+            400: OpenApiResponse(
+                description="Profile not found",
+                examples=[
+                    OpenApiExample(
+                        "Error Response",
+                        value={"Error": "Profile does not exist"},
+                        status_codes=["400"],
+                    )
+                ]
+            )
+        },
+        description="Block a user profile by ID",
+        summary="Block profile"
+    )
     @action(detail=True, methods=["post"], url_path=r"actions/block-profile")
     def block_profile(self, request, pk=None):
         current_profile = request.user
@@ -314,6 +449,23 @@ class ProfileViewSet(ModelViewSet):
         serializer = serializers.SwipeProfileSerializer(blocked_profile, many=False)
         return Response(serializer.data)
 
+    @extend_schema(
+        responses={
+            200: serializers.SwipeProfileSerializer,
+            400: OpenApiResponse(
+                description="Profile not found",
+                examples=[
+                    OpenApiExample(
+                        "Error Response",
+                        value={"Error": "Profile does not exist"},
+                        status_codes=["400"],
+                    )
+                ]
+            )
+        },
+        description="Unblock a previously blocked user profile by ID",
+        summary="Unblock profile"
+    )
     @action(detail=True, methods=["post"], url_path=r"actions/disblock-profile")
     def disblock_profile(self, request, pk=None):
         profile = request.user
@@ -325,6 +477,28 @@ class ProfileViewSet(ModelViewSet):
         serializer = serializers.SwipeProfileSerializer(blocked_profile, many=False)
         return Response(serializer.data)
 
+    @extend_schema(
+        responses={
+            200: OpenApiResponse(
+                description="List of blocked profiles",
+                examples=[
+                    OpenApiExample(
+                        "Success Response",
+                        value={
+                            "count": 2,
+                            "results": [
+                                {"id": "profile_id1", "name": "User 1", "email": "user1@example.com"},
+                                {"id": "profile_id2", "name": "User 2", "email": "user2@example.com"}
+                            ]
+                        },
+                        status_codes=["200"],
+                    )
+                ]
+            )
+        },
+        description="Get a list of all profiles blocked by the current user",
+        summary="Get blocked profiles"
+    )
     @action(detail=False, methods=["get"], url_path=r"actions/get-blocked-profiles")
     def get_blocked_profiles(self, request):
         current_profile = request.user
@@ -332,6 +506,40 @@ class ProfileViewSet(ModelViewSet):
         serializer = serializers.SwipeProfileSerializer(blocked_profiles, many=True)
         return Response({"count": blocked_profiles.count(), "results": serializer.data})
 
+    @extend_schema(
+        request=OpenApiExample(
+            name="Reset Password Request",
+            value={
+                "password": "new_password",
+                "repeated_password": "new_password"
+            },
+            request_only=True
+        ),
+        responses={
+            200: OpenApiResponse(
+                description="Password reset successful",
+                examples=[
+                    OpenApiExample(
+                        "Success Response",
+                        value={"detail": "You password has been reseted"},
+                        status_codes=["200"],
+                    )
+                ]
+            ),
+            400: OpenApiResponse(
+                description="Passwords don't match",
+                examples=[
+                    OpenApiExample(
+                        "Error Response",
+                        value={"detail": "Your passwords does not match"},
+                        status_codes=["400"],
+                    )
+                ]
+            )
+        },
+        description="Reset user password with a new password",
+        summary="Reset password"
+    )
     @action(detail=False, methods=["post"], url_path=r"actions/reset-password")
     def reset_password(self, request):
         current_profile = request.user
@@ -351,7 +559,32 @@ class ProfileViewSet(ModelViewSet):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # report profile endpoint
+    @extend_schema(
+        responses={
+            200: OpenApiResponse(
+                description="Report sent successfully",
+                examples=[
+                    OpenApiExample(
+                        "Success Response",
+                        value={"detail": "Report sent successfully"},
+                        status_codes=["200"],
+                    )
+                ]
+            ),
+            400: OpenApiResponse(
+                description="Profile not found",
+                examples=[
+                    OpenApiExample(
+                        "Error Response",
+                        value={"Error": "Profile does not exist"},
+                        status_codes=["400"],
+                    )
+                ]
+            )
+        },
+        description="Report a user profile and automatically block them",
+        summary="Report profile"
+    )
     @action(detail=True, methods=["post"], url_path=r"actions/report-profile")
     def report_profile(self, request, pk=None):
         current_profile = request.user
@@ -426,3 +659,217 @@ class PhotoViewSet(ModelViewSet):
         photo = models.Photo.objects.get(pk=pk)
         photo.delete()
         return Response({"detail": "Photo deleted"}, status=status.HTTP_200_OK)
+
+@extend_schema(
+    request=serializers.PhoneVerificationRequestSerializer,
+    responses={
+        200: OpenApiResponse(
+            description="Verification code sent successfully",
+            examples=[
+                OpenApiExample(
+                    "Success Response",
+                    value={"detail": "Verification code sent successfully"},
+                    status_codes=["200"],
+                )
+            ]
+        ),
+        400: OpenApiResponse(
+            description="Failed to send verification code",
+            examples=[
+                OpenApiExample(
+                    "Error Response",
+                    value={"detail": "Failed to send verification code"},
+                    status_codes=["400"],
+                )
+            ]
+        )
+    },
+    description="Send a verification code to the provided phone number",
+    summary="Send phone verification code"
+)
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def send_phone_verification(request):
+    """
+    Send a verification code to the provided phone number.
+    
+    Example request:
+    {
+        "phone": "912345678"
+    }
+    
+    Example response:
+    {
+        "detail": "Verification code sent successfully"
+    }
+    """
+    serializer = serializers.PhoneVerificationRequestSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    phone = serializer.validated_data["phone"]
+
+    # Format phone number to include country code if not present
+    if not phone.startswith("+"):
+        phone = f"+251{phone}"
+
+    # Call Afromessage API to send verification code
+    headers = {
+        "Authorization": f"Bearer {settings.AFROMESSAGE_API_KEY}",
+        "Content-type": "application/json"
+    }
+    
+    params = {
+        "from": "",
+        "sender": "",
+        "to": phone,
+        "ps": "Your verification code is",
+        "sb": "1",
+        "sa": "1",
+        "ttl": "0",
+        "len": "4",
+        "t": "0"
+    }
+
+    response = requests.get(
+        "https://api.afromessage.com/api/challenge",
+        headers=headers,
+        params=params
+    )
+
+    if response.status_code != 200:
+        return Response(
+            {"detail": "Failed to send verification code"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    data = response.json()
+    if data["acknowledge"] != "success":
+        return Response(
+            {"detail": "Failed to send verification code"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    return Response(
+        {"detail": "Verification code sent successfully"},
+        status=status.HTTP_200_OK
+    )
+
+@extend_schema(
+    request=serializers.PhoneVerificationSerializer,
+    responses={
+        200: OpenApiResponse(
+            description="Phone verification successful",
+            examples=[
+                OpenApiExample(
+                    "Success Response",
+                    value={
+                        "refresh": "refresh_token_here",
+                        "access": "access_token_here",
+                        "id": "user_id",
+                        "phone": "+251912345678",
+                        "name": "User Name",
+                        "email": "user@example.com",
+                        "is_phone_verified": True
+                    },
+                    status_codes=["200"],
+                )
+            ]
+        ),
+        400: OpenApiResponse(
+            description="Verification failed",
+            examples=[
+                OpenApiExample(
+                    "Error Response",
+                    value={"detail": "Invalid verification code"},
+                    status_codes=["400"],
+                )
+            ]
+        )
+    },
+    description="Verify the code sent to the phone number and log in or register the user",
+    summary="Verify phone and login/register"
+)
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def verify_phone_code(request):
+    """
+    Verify the code sent to the phone number and log in or register the user.
+    
+    Example request:
+    {
+        "phone": "912345678",
+        "code": "1234"
+    }
+    
+    Example response:
+    {
+        "refresh": "refresh_token_here",
+        "access": "access_token_here",
+        "id": "user_id",
+        "email": "user_email",
+        "name": "user_name",
+        ... other user fields ...
+    }
+    """
+    serializer = serializers.PhoneVerificationSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    phone = serializer.validated_data["phone"]
+    code = serializer.validated_data["code"]
+
+    # Format phone number to include country code if not present
+    if not phone.startswith("+"):
+        phone = f"+251{phone}"
+
+    # Call Afromessage API to verify code
+    headers = {
+        "Authorization": f"Bearer {settings.AFROMESSAGE_API_KEY}",
+        "Content-type": "application/json"
+    }
+    
+    params = {
+        "to": phone,
+        "code": code
+    }
+
+    response = requests.get(
+        "https://api.afromessage.com/api/verify",
+        headers=headers,
+        params=params
+    )
+
+    if response.status_code != 200:
+        return Response(
+            {"detail": "Failed to verify code"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    data = response.json()
+    if data["acknowledge"] != "success":
+        return Response(
+            {"detail": "Invalid verification code"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Check if user exists with this phone number
+    try:
+        user = models.Profile.objects.get(phone=phone)
+        # User exists, update phone verification status if needed
+        if not user.is_phone_verified:
+            user.is_phone_verified = True
+            user.save()
+    except models.Profile.DoesNotExist:
+        # Create a new user with phone number
+        user = models.Profile.objects.create(
+            phone=phone,
+            is_phone_verified=True,
+            password=make_password(str(uuid.uuid4()))  # Generate random password
+        )
+
+    # Generate token directly using RefreshToken
+    refresh = RefreshToken.for_user(user)
+    
+    # Create response with user data and tokens
+    response_data = serializers.ProfileSerializer(user, many=False).data
+    response_data['refresh'] = str(refresh)
+    response_data['access'] = str(refresh.access_token)
+    
+    return Response(response_data, status=status.HTTP_200_OK)

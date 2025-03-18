@@ -28,7 +28,8 @@ class Profile(AbstractBaseUser, PermissionsMixin):
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    email = models.CharField(max_length=200, unique=True)
+    email = models.CharField(max_length=200, unique=True, null=True, blank=True)
+    phone = models.CharField(max_length=15, unique=True, null=True, blank=True)
     name = models.CharField(max_length=200, null=True)
     password = models.CharField(max_length=200)
     is_staff = models.BooleanField(default=False)
@@ -36,6 +37,7 @@ class Profile(AbstractBaseUser, PermissionsMixin):
     created_at = models.DateTimeField(default=timezone.now)
     has_account = models.BooleanField(default=False)
     is_in_group = models.BooleanField(default=False)
+    is_phone_verified = models.BooleanField(default=False)
 
     location = models.PointField(srid=4326, blank=True, null=True)
 
@@ -279,3 +281,23 @@ class Message(models.Model):
 
     def get_sent_time(self):
         return self.sent_at.strftime("%I:%M %p")
+
+
+class PhoneVerification(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    profile = models.OneToOneField(
+        Profile,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="phone_verification"
+    )
+    phone = models.CharField(max_length=15)
+    code = models.CharField(max_length=6)
+    verification_id = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_verified = models.BooleanField(default=False)
+
+    def is_expired(self):
+        return timezone.now() > self.expires_at

@@ -8,6 +8,9 @@ from django.contrib.gis.measure import D
 from django.db.models import Q
 from itertools import chain
 
+# Documentation imports
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample, OpenApiResponse
+
 from service.core.pagination import MatchPagination
 from api import models, serializers
 import api.handlers.matchmaking as matchmaking
@@ -19,8 +22,19 @@ import api.utils.checks as c
 
 class SwipeModelViewSet(ModelViewSet):
     permission_classes = [IsAuthenticated]
+    serializer_class = serializers.SwipeProfileSerializer
+    http_method_names = ['get', 'post']  # Only allow GET and POST requests
 
     # * List swipe profiles cards
+    @extend_schema(
+        summary="List swipe profiles cards",
+        description="Retrieve a list of swipe profiles cards",
+        responses={
+            200: OpenApiResponse(description="List of swipe profiles cards"),
+            401: OpenApiResponse(description="Unauthorized"),
+            400: OpenApiResponse(description="Bad request")
+        }
+    )
     def list(self, request):
         current_profile = request.user
         profiles = models.Profile.objects.all().filter(has_account=True)
@@ -76,12 +90,28 @@ class SwipeModelViewSet(ModelViewSet):
             }
         )
 
+    @extend_schema(
+        summary="Get a profile by ID",
+        description="Retrieve a single profile by ID",
+        responses={
+            200: serializers.SwipeProfileSerializer,
+            404: OpenApiResponse(description="Profile not found")
+        }
+    )
     def retrieve(self, request, pk=None):
         profile = models.Profile.objects.get(pk=pk)
         serializer = serializers.SwipeProfileSerializer(profile, many=False)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["get"], url_path=r"actions/get-swipe-profile")
+    @extend_schema(
+        summary="Get a swipe profile",
+        description="Retrieve a swipe profile as single or as a group",
+        responses={
+            200: OpenApiResponse(description="Swipe profile data"),
+            400: OpenApiResponse(description="Bad request")
+        }
+    )
     def get_swipe_profile(self, request, pk=None):
         # get a profile as single or as a group
         try:
@@ -105,6 +135,14 @@ class SwipeModelViewSet(ModelViewSet):
         return Response(profile_serializer.data)
 
     @action(detail=True, methods=["post"], url_path=r"actions/like")
+    @extend_schema(
+        summary="Like a profile or group",
+        description="Like a profile or group",
+        responses={
+            200: OpenApiResponse(description="Like given successfully"),
+            400: OpenApiResponse(description="Bad request")
+        }
+    )
     def like(self, request, pk=None):
         current_profile = request.user
 
@@ -156,6 +194,14 @@ class SwipeModelViewSet(ModelViewSet):
         )
 
     @action(detail=True, methods=["post"], url_path=r"actions/unlike")
+    @extend_schema(
+        summary="Unlike a profile or group",
+        description="Unlike a profile or group",
+        responses={
+            200: OpenApiResponse(description="Unliked successfully"),
+            400: OpenApiResponse(description="Bad request")
+        }
+    )
     def unlike(self, request, pk=None):
         # unlike profile or group that I liked previously
         current_profile = request.user
@@ -175,6 +221,14 @@ class SwipeModelViewSet(ModelViewSet):
         return Response({"details": "Unliked"})
 
     @action(detail=True, methods=["post"], url_path=r"actions/remove-like")
+    @extend_schema(
+        summary="Remove a like",
+        description="Remove a like from a profile or group",
+        responses={
+            200: OpenApiResponse(description="Like removed successfully"),
+            400: OpenApiResponse(description="Bad request")
+        }
+    )
     def remove_like(self, request, pk=None):
         current_profile = request.user
         try:
@@ -204,6 +258,14 @@ class SwipeModelViewSet(ModelViewSet):
         return Response({"details": "Like removed"})
 
     @action(detail=False, methods=["get"], url_path=r"actions/get-likes")
+    @extend_schema(
+        summary="Get likes",
+        description="Retrieve a list of likes",
+        responses={
+            200: OpenApiResponse(description="List of likes"),
+            400: OpenApiResponse(description="Bad request")
+        }
+    )
     def list_likes(self, request):
         current_profile = request.user
 
@@ -268,6 +330,7 @@ class MatchModelViewSet(ModelViewSet):
     serializer_class = serializers.MatchSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = MatchPagination
+    http_method_names = ['get', 'delete']  # Only allow GET and DELETE requests
 
     def get_permissions(self):
         if self.action == "create" or self.action == "update":
@@ -275,6 +338,14 @@ class MatchModelViewSet(ModelViewSet):
         return [permission() for permission in self.permission_classes]
 
     # list the current profile matches
+    @extend_schema(
+        summary="List current profile matches",
+        description="Retrieve a list of current profile matches",
+        responses={
+            200: OpenApiResponse(description="List of current profile matches"),
+            400: OpenApiResponse(description="Bad request")
+        }
+    )
     def list(self, request):
         current_profile = request.user
 
@@ -302,6 +373,15 @@ class MatchModelViewSet(ModelViewSet):
 
         return self.get_paginated_response(serializer.data)
 
+    @extend_schema(
+        summary="Get a match by ID",
+        description="Retrieve a single match by ID",
+        responses={
+            200: serializers.MatchSerializer,
+            400: OpenApiResponse(description="Match not found"),
+            401: OpenApiResponse(description="Unauthorized")
+        }
+    )
     def retrieve(self, request, pk=None):
         current_profile = request.user
 
@@ -325,6 +405,14 @@ class MatchModelViewSet(ModelViewSet):
             {"detail": "Not authorized"}, status=status.HTTP_401_UNAUTHORIZED
         )
 
+    @extend_schema(
+        summary="Delete a match",
+        description="Delete a match and remove associated likes and conversation",
+        responses={
+            200: OpenApiResponse(description="Match deleted successfully"),
+            400: OpenApiResponse(description="Match not found or other error")
+        }
+    )
     def destroy(self, request, pk=None):
         current_profile = request.user
 

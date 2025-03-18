@@ -17,8 +17,8 @@ from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
-
+GDAL_LIBRARY_PATH = 'C:/OSGeo4W/bin/gdal310.dll'
+GEOS_LIBRARY_PATH = 'C:/OSGeo4W/bin/geos_c.dll'
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.0/howto/deployment/checklist/
 
@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "django.contrib.gis",
+    "drf_spectacular",
     "api.apps.ApiConfig",
 ]
 
@@ -85,6 +86,7 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_PAGINATION_CLASS": "service.core.pagination.CustomNumberPagination",
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 if "PRODUCTION" in os.environ:
@@ -239,7 +241,9 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 MEDIA_URL = "/images/"
-
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static'),
+]
 
 if "PRODUCTION" in os.environ:
     STATIC_ROOT = os.path.join(BASE_DIR, "static")
@@ -248,10 +252,7 @@ if "PRODUCTION" in os.environ:
     AWS_ACCESS_KEY_ID = os.environ["AWS_ACCESS_KEY_ID"]
     AWS_SECRET_ACCESS_KEY = os.environ["AWS_SECRET_ACCESS_KEY"]
     AWS_STORAGE_BUCKET_NAME = "toogether-images"
-    AWS_QUERYSTRING_AUTH = False
-    AWS_S3_FILE_OVERWRITE = True
 else:
-    STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
     MEDIA_ROOT = "static/images"
 
 # Default primary key field type
@@ -265,3 +266,17 @@ EMAIL_PORT = os.environ["EMAIL_PORT"]
 EMAIL_HOST_USER = os.environ["EMAIL_HOST_USER"]
 EMAIL_HOST_PASSWORD = os.environ["EMAIL_HOST_PASSWORD"]
 EMAIL_USE_TLS = os.environ["EMAIL_USE_TLS"]
+
+AFROMESSAGE_API_KEY = os.environ["AFROMESSAGE_API_KEY"]
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Abel date",
+    "DESCRIPTION": "Your API description",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "SWAGGER_UI_SETTINGS": {
+        "deepLinking": True,
+        "persistAuthorization": True,
+    },
+}
