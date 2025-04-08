@@ -374,3 +374,9 @@ class PhoneVerificationResponseSerializer(serializers.Serializer):
 
 class PhoneVerificationRequestSerializer(serializers.Serializer):
     phone = serializers.CharField(required=True)
+
+
+class RegistrationSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+    password = serializers.CharField(required=True, write_only=True)
+    repeated_password = serializers.CharField(required=True, write_only=True)

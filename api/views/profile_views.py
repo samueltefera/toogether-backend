@@ -216,33 +216,9 @@ class ProfileViewSet(ModelViewSet):
         )
 
     @extend_schema(
-        request=OpenApiExample(
-            name="Registration Request",
-            value={
-                "email": "user@example.com",
-                "password": "your_password",
-                "repeated_password": "your_password"
-            },
-            request_only=True
-        ),
+        request=serializers.RegistrationSerializer,
         responses={
-            201: OpenApiResponse(
-                description="User registered successfully",
-                examples=[
-                    OpenApiExample(
-                        "Success Response",
-                        value={
-                            "id": "user_id",
-                            "email": "user@example.com",
-                            "name": None,
-                            "has_account": False,
-                            "is_in_group": False,
-                            "token": "access_token_here"
-                        },
-                        status_codes=["201"],
-                    )
-                ]
-            ),
+            201: serializers.ProfileSerializer,
             400: OpenApiResponse(
                 description="Registration failed",
                 examples=[
