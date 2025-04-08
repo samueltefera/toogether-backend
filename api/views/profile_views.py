@@ -215,6 +215,58 @@ class ProfileViewSet(ModelViewSet):
             {"detail": "Not authorized"}, status=status.HTTP_401_UNAUTHORIZED
         )
 
+    @extend_schema(
+        request=OpenApiExample(
+            name="Registration Request",
+            value={
+                "email": "user@example.com",
+                "password": "your_password",
+                "repeated_password": "your_password"
+            },
+            request_only=True
+        ),
+        responses={
+            201: OpenApiResponse(
+                description="User registered successfully",
+                examples=[
+                    OpenApiExample(
+                        "Success Response",
+                        value={
+                            "id": "user_id",
+                            "email": "user@example.com",
+                            "name": None,
+                            "has_account": False,
+                            "is_in_group": False,
+                            "token": "access_token_here"
+                        },
+                        status_codes=["201"],
+                    )
+                ]
+            ),
+            400: OpenApiResponse(
+                description="Registration failed",
+                examples=[
+                    OpenApiExample(
+                        "Missing Fields Response",
+                        value={"detail": "Email, password and repeated_password are required"},
+                        status_codes=["400"],
+                    ),
+                    OpenApiExample(
+                        "Password Mismatch Response",
+                        value={"detail": "Your password does not match"},
+                        status_codes=["400"],
+                    ),
+                    OpenApiExample(
+                        "Email Exists Response",
+                        value={"detail": "User with this email already exist"},
+                        status_codes=["400"],
+                    )
+                ]
+            )
+        },
+        description="Register a new user with email and password",
+        summary="User Registration"
+    )
     # * Register
     def create(self, request):
         data = request.data
